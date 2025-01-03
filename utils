@@ -9,9 +9,6 @@ import torchvision.transforms as transforms
 
 from tqdm import tqdm
 
-import torch.bin
-
-
 @torch.no_grad()
 def inference_one_epoch(model, loader, num_classes, args):
     model.eval()
@@ -91,44 +88,6 @@ def entropy_loss(mask, logits_s, prob_model, label_hist):
     loss = loss.sum(dim=1)
     return loss.mean(), hist_s.mean()
 
-
-
-def train_one_epoch_mix(model, labeled_loader, unlabeled_loader, optimizer, args, label_smoothing=0.05):
-    model.train()
-    assert len(labeled_loader) == len(unlabeled_loader), \
-        'labeled_loader and unlabeled_loader should have same length'
-    labeled_loader = tqdm(labeled_loader, ncols=100, colour="blue")
-    p_model = (torch.ones(args.num_classes) / args.num_classes).to(args.device)
-    label_hist = (torch.ones(args.num_classes) / args.num_classes).to(args.device)
-    time_p = p_model.mean()
-
-    for (inputs_x, targets_x), ((inputs_u_w, inputs_u_s), _) in zip(labeled_loader, unlabeled_loader):
-        inputs = interleave(torch.cat((inputs_x, inputs_u_w, inputs_u_s)), 2 * args.k - 1).to(args.device)
-        targets_x = targets_x.to(args.device)
-
-        logits = model(inputs)
-        logits = de_interleave(logits, 2 * args.k - 1)
-
-        logits_x = logits[:args.batch_size]
-        logits_u_w, logits_u_s = logits[args.batch_size:].chunk(2)
-
-        del logits
-
-        sup_loss = F.cross_entropy(logits_x, targets_x, reduction='mean', label_smoothing=label_smoothing)
-
-        psuedo_label = gen_ulb_targets(logits_u_w, use_hard_label=args.use_hard_label, T=args.T)
-        mask, p_model, label_hist, time_p = generate_mask(logits_u_w, p_model, label_hist, time_p)
-
-        unsup_loss = (F.cross_entropy(logits_u_s, psuedo_label, reduction='none') * mask).mean()
-
-
-        loss = Lx + args.lambda_u * Lu
-
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-
-        return loss
 
 @torch.no_grad()
 def update_time_p_and_p_model(probs_u_w, p_model, label_hist, time_p,

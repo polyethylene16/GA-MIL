@@ -25,7 +25,6 @@ def inference_one_epoch(model, loader, num_classes, args):
 
     return probs.cpu().numpy()
 
-
 def train_one_epoch(model, loader, criterion, optimizer, args, grid=None):
     model.train()
     mean_loss = torch.zeros(1).to(args.device)
@@ -88,7 +87,19 @@ def entropy_loss(mask, logits_s, prob_model, label_hist):
     loss = loss.sum(dim=1)
     return loss.mean(), hist_s.mean()
 
-
+def train_one_epoch_mix(model,
+                        labeled_loader, 
+                        unlabeled_loader,
+                        optimizer,
+                        args,
+                        p_model=None,
+                        label_hist=None,
+                        time_p=None,
+                        label_smoothing=0.05):
+    model.train()
+    assert len(labeled_loader) == len(unlabeled_loader), \
+        'labeled_loader and unlabeled_loader should have same length'
+    labeled_loader = tqdm(labeled_loader, ncols=100, colour='blue')
 @torch.no_grad()
 def update_time_p_and_p_model(probs_u_w, p_model, label_hist, time_p,
                               m=0.999, clip_thresh=False, use_quantile=True):
